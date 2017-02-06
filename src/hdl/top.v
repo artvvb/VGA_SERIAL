@@ -22,15 +22,15 @@
 
 module top_ascii(
     input clk,
-    input btn,
-    input [7:0] sw,
-    output [15:0] led,
+//    input btn,
+//    input [7:0] sw,
+//    output [15:0] led,
     output vs,
     output hs,
     output [3:0] vga_r,
     output [3:0] vga_g,
     output [3:0] vga_b,
-    input rx,
+//    input rx,
     input tx
 );
     localparam  Idle        = 0,
@@ -46,7 +46,7 @@ module top_ascii(
     
     localparam MAXX = 79, MAXY = 59;
     
-    assign led = ascii_address;
+//    assign led = ascii_address;
     assign ascii_address = cy * (MAXX+1) + cx;
     
     reg [23:0] rx_shift;
