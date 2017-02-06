@@ -33,87 +33,54 @@ module top_ascii(
     input rx,
     input tx
 );
-    localparam Idle       = 0,
-               Done       = 1,
-               MoveCursor = 2;
+    localparam  Idle        = 0,
+                MoveCursor  = 1,
+                EvalOp      = 2;
+    reg         ascii_wr_en = 0;
+    reg   [1:0] state       = Idle;
+    reg  [12:0] cy          = 0,
+                cx          = 0;
+    wire        rx_flag;
+    wire  [7:0] rx_data;
     wire [12:0] ascii_address;
-    reg  [1:0] state = Idle;
-    reg        ascii_wr_en = 0;
-    reg  [7:0] ascii_data;
-    reg [15:0] l_ascii_data;
-//    wire       dbtn;
-    wire       rx_flag;
-    wire [7:0] rx_data;
-    
-    reg  [12:0] cy=0, cx=0, dy=0, dx=0;
-    reg bselect;
     
     localparam MAXX = 79, MAXY = 59;
     
     assign led = ascii_address;
     assign ascii_address = cy * (MAXX+1) + cx;
     
+    reg [23:0] rx_shift;
     always@(posedge clk)
         case(state)
         Idle: begin
-            if (rx_flag == 1) begin
-                state <= Done;
-                ascii_data <= rx_data;
-                l_ascii_data <= {l_ascii_data[7:0], ascii_data};
-                if (rx_data >= 32 && l_ascii_data[7:0] != 8'h1b && ascii_data != 8'h1b)
-                    ascii_wr_en <= 1;
+            if (rx_flag == 1) begin // ensured to be one clock cycle long pulse
+                state <= EvalOp;
+                rx_shift <= {rx_shift[15:0], rx_data}; // enter received data into the shift register
             end
         end
-        Done: begin
-            ascii_wr_en <= 0;
-            if (rx_flag == 0) begin
-                state <= Idle;
-                if (l_ascii_data[7:0] == 8'h1b || l_ascii_data[15:8] == 8'h1b) begin
-                    if (ascii_data == 8'h41 && l_ascii_data == {8'h1b, 8'h5b})begin // up arrow
-                        cy <= (cy == 0) ? MAXY : (cy - 1);
-                    end else if (ascii_data == 8'h42 && l_ascii_data == {8'h1b, 8'h5b}) begin // down arrow
-                        cy <= (cy == MAXY) ? 0 : (cy + 1);
-                    end else if (ascii_data == 8'h43 && l_ascii_data == {8'h1b, 8'h5b}) begin // right arrow
-                        cx <= (cx == MAXX) ? 0 : (cx + 1);
-                    end else if (ascii_data == 8'h44 && l_ascii_data == {8'h1b, 8'h5b}) begin // left arrow
-                        cx <= (cx == 0) ? MAXX : (cx - 1);
-                    end
-                end else if (ascii_data >= 32) begin
-                    cx <= (cx == MAXX) ? 0 : (cx + 1);
-                end else if (ascii_data == 13) begin
-                    cx <= (cx/(MAXX+1))*(MAXX+1);
-                end else if (ascii_data == 10) begin
-                    cy <= (cy == MAXY) ? 0 : (cy + 1);
-                end
-            end
+        EvalOp: begin
+            state <= MoveCursor;
+            if (rx_shift[7:0] < 32)            ascii_wr_en <= 0; // character is not typable
+            else if (rx_shift[23:16] == 8'h1b) ascii_wr_en <= 0; // recent escape code
+            else if (rx_shift[15:8]  == 8'h1b) ascii_wr_en <= 0; // recent escape code
+            else                               ascii_wr_en <= 1; // enter the character into the vga bram
         end
+        MoveCursor: begin
+            ascii_wr_en <= 0; // ensure write enable is one clock cycle long
+            state <= Idle;
+            if (rx_shift[23:16] == 8'h1b || rx_shift[15:8] == 8'h1b) begin
+                if      (rx_shift == {8'h1b, 8'h5b, 8'h41})     cy <= (cy == 0)    ? MAXY : (cy - 1); // up arrow
+                else if (rx_shift == {8'h1b, 8'h5b, 8'h42})     cy <= (cy == MAXY) ? 0    : (cy + 1); // down arrow
+                else if (rx_shift == {8'h1b, 8'h5b, 8'h43})     cx <= (cx == MAXX) ? 0    : (cx + 1); // right arrow
+                else if (rx_shift == {8'h1b, 8'h5b, 8'h44})     cx <= (cx == 0)    ? MAXX : (cx - 1); // left arrow
+            end else if (rx_shift[7:0] >= 32)   cx <= (cx == MAXX) ? 0 : (cx + 1); // any typable character
+            else if     (rx_shift[7:0] == 13)   cx <= 0;                           // CR
+            else if     (rx_shift[7:0] == 10)   cy <= (cy == MAXY) ? 0 : (cy + 1); // LF
+        end
+        default: state <= Idle;
         endcase
     
-    vga_2buf mVGA (
-        clk,
-        ascii_address,
-        ascii_data,
-        ascii_wr_en,
-        vs,
-        hs,
-        vga_r,
-        vga_g,
-        vga_b,
-        ascii_address,
-        0
-    );
+    vga_2buf mVGA ( clk, ascii_address, rx_shift[7:0], ascii_wr_en, vs, hs, vga_r, vga_g, vga_b, ascii_address, 0 );
+    uart_rx  mRX  ( clk, rx_flag, rx_data, tx );
     
-    uart_rx mRX (
-        clk,
-        rx_flag,
-        rx_data,
-        btn ? rx : tx
-    );
-//    uart_tx mTX (
-//        clk,  
-//        rx_data, 
-//        rx_flag,
-//        tx,   
-//        1'bz
-//    );
 endmodule
