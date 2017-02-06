@@ -46,6 +46,8 @@ module top_ascii(
     wire [7:0] rx_data;
     
     reg  [12:0] cy=0, cx=0, dy=0, dx=0;
+    reg bselect;
+    
     localparam MAXX = 79, MAXY = 59;
     
     assign led = ascii_address;
@@ -87,7 +89,7 @@ module top_ascii(
         end
         endcase
     
-    vga_ascii mVGA (
+    vga_2buf mVGA (
         clk,
         ascii_address,
         ascii_data,
@@ -97,7 +99,8 @@ module top_ascii(
         vga_r,
         vga_g,
         vga_b,
-        ascii_address
+        ascii_address,
+        0
     );
     
     uart_rx mRX (
