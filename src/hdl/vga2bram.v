@@ -44,19 +44,20 @@ module vga2bram #(
     input  wire [7:0] tex_data,
     output wire tex_ren
 );
+    // numeric suffix of internal signals denotes the relative position of the data within the pipe
     wire px_valid_0;
     wire [PIXEL_DIM_WIDTH-1:0] px_x_0;
     wire [PIXEL_DIM_WIDTH-1:0] px_y_0;
     wire [COLOR_BITS-1:0] px_color_0;
     wire screen_addr_0;
+    wire screen_ren_0;
     wire [6:0] screen_data_1;
     wire [6:0] tex_addr_1;
-    wire [6:0] tex_data_2;
     reg [6:0] tex_ren_1;
     reg [2:0] tex_chr_x_idx_1;
     reg [2:0] tex_chr_y_idx_1;
+    wire [6:0] tex_data_2;
     reg [2:0] tex_chr_y_idx_2;
-    wire screen_ren_0;
     
     assign screen_ren = screen_ren_0;
     assign screen_addr = screen_addr_0;
