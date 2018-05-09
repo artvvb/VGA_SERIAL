@@ -21,11 +21,11 @@
 
 //`include "math.vh"
 module uart_tx(
-    input       clk,
-    input [7:0] data,
-    input       start,
-    output      tx,
-    output      ready 
+    input wire clk,
+    input wire [7:0] data,
+    input wire start,
+    output wire tx,
+    output wire ready 
     );
     parameter   BAUD        = 9600,
                 CLOCK       = 100000000;
@@ -35,6 +35,7 @@ module uart_tx(
     reg [3:0] count=0;
     reg running=0;
     reg [10:0] shift=11'h7ff;
+    reg [7:0] buf_data = 0;
     always@(posedge clk) begin
         if (running == 1'b0) begin
             shift <= {2'b11, data, 1'b0};
@@ -44,8 +45,10 @@ module uart_tx(
         end else if (cd_count == COUNT_MAX) begin
             shift <= {1'b1, shift[10:1]};
             cd_count <= 'b0;
-            if (count == 4'd10) begin
-                running <= 1'b0;
+            if (count >= 4'd10) begin
+                shift <= {2'b11, data, 1'b0};
+                running <= start;
+                cd_count <= 'b0;
                 count <= 'b0;
             end
             else

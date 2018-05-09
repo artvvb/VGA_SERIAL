@@ -3,7 +3,7 @@
 // Company: 
 // Engineer: 
 // 
-// Create Date: 01/17/2017 02:54:53 PM
+// Create Date: 05/04/2018 11:11:54 AM
 // Design Name: 
 // Module Name: vga
 // Project Name: 
@@ -20,81 +20,61 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module vga_ascii (
-    input clk,
-//    input switch_buffers,
-    input [12:0] ascii_address,
-    input  [7:0] ascii_data,
-    input        ascii_wr_en,
-    output reg vs,
-    output reg hs,
-    output reg [3:0] vga_r,
-    output reg [3:0] vga_g,
-    output reg [3:0] vga_b,
-    input [12:0] cursor
-    );
-    localparam  HTS = 800,
-                VTS = 521,
-                HTD = 640,
-                VTD = 480,
-                HTPW = 96,
-                VTPW = 2,
-                HTFP = 16,
-                VTFP = 10,
-                HTBP = 48,
-                VTBP = 29;
-    reg   [1:0] ccount=0;
-    reg   [9:0] hcount=0;
-    reg   [9:0] vcount=0;
-    wire        disp_in_bounds;
-//    reg  [13:0] pixel_raddr;
-    wire  [9:0] px, py;
-    //reg [11:0] pixel_rdata;
-    
-    reg [7:0] mem  [2**13-1:0];
-    reg [7:0] clib [2**10-1:0];
-    initial $readmemh("ascii_init.dat", mem);
-    initial $readmemh("charLib.dat", clib);
-    reg [7:0] tdata;
+module vga #(
+    parameter COLOR_BITS = 1,
+    parameter PIXEL_INTERFACE_LATENCY = 4,
+    parameter PIXEL_DIM_WIDTH = 10
+) (
+    input wire clk,
+    output wire n_px_valid,
+    output wire [PIXEL_DIM_WIDTH-1:0] n_px_x,
+    output wire [PIXEL_DIM_WIDTH-1:0] n_px_y,
+    input wire [COLOR_BITS-1:0] n_px_color,
+    output wire vga_vs,
+    output wire vga_hs,
+    output wire [3:0] vga_r,
+    output wire [3:0] vga_g,
+    output wire [3:0] vga_b,
+    output wire eof_flag
+    ,input wire [15:0] sw
+);
+//    //640x480@60Hz Params; f_clk = 25.175 MHz
+//    localparam HTS=800, VTS=525, HTD=640, VTD=480, HTPW=96, VTPW=2, HTFP=16, VTFP=10, HTBP=48, VTBP=33, SYNC_POL=0;
+    //1920x1080@60Hz Params; f_clk = 145.5 MHz
+    localparam HTS=2200, VTS=1125, HTD=1920, VTD=1080, HTPW=44, VTPW=5, HTFP=88, VTFP=4, HTBP=148, VTBP=36, SYNC_POL=1;
+    reg [PIXEL_DIM_WIDTH-1:0] count_x = 0;
+    reg [PIXEL_DIM_WIDTH-1:0] count_y = 0;
+    wire count_x_tc = (count_x >= HTS-1) ? 1'b1 : 1'b0;
+    wire count_y_tc = (count_x_tc == 1'b1 && count_y >= VTS-1) ? 1'b1 : 1'b0;
+    wire [PIXEL_DIM_WIDTH-1:0] n_count_x = (count_x_tc == 1'b1) ? ('b0) : (count_x + 1'b1);
+    wire [PIXEL_DIM_WIDTH-1:0] n_count_y = (count_x_tc == 1'b1) ? ((count_y_tc == 1'b1) ? ('b0) : (count_y + 1'b1)) : (count_y);
+    assign eof_flag = count_y_tc;
+    assign n_px_x = n_count_x;// - sw[7:0];// - HTFP - HTPW;
+    assign n_px_y = n_count_y;// - sw[15:8];// - VTFP - VTPW;
+//    assign n_px_valid = (n_count_x >= HTFP + HTPW && n_count_y >= VTFP + VTPW && n_count_x < HTFP + HTPW + HTD && n_count_y < VTFP + VTPW + VTD) ? 1'b1 : 1'b0;
+    assign n_px_valid = (n_count_x < HTD && n_count_y < VTD) ? 1'b1 : 1'b0;
+    reg [COLOR_BITS-1:0] color = 0;
+    wire [COLOR_BITS-1:0] n_color = (n_px_valid == 1'b1) ? n_px_color : 'b0;
     always@(posedge clk) begin
-        ccount <= ccount + 1;
-        if (ccount == 0) begin
-            if (disp_in_bounds == 1) begin
-                tdata <= mem[(py/8)*80 + (px/8)];
-            end
-        end else if (ccount == 1) begin
-            if (disp_in_bounds == 1) begin
-                tdata <= clib[{tdata[6:0], px[2:0]}];
-            end
-        end else if (ccount == 2) begin
-            vs <= (vcount < VTPW) ? 0 : 1;
-            hs <= (hcount < HTPW) ? 0 : 1;
-            if ((py/8)*80 + (px/8) == cursor) begin
-                vga_r <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) == 0) ? 4'hf : 0;
-                vga_g <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) == 0) ? 4'hf : 0;
-                vga_b <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) == 0) ? 4'hf : 0;
-            end else begin
-                vga_r <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) != 0) ? 4'hf : 0;
-                vga_g <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) != 0) ? 4'hf : 0;
-                vga_b <= (disp_in_bounds == 1 && (tdata & (1 << py[2:0])) != 0) ? 4'hf : 0;
-            end
-        end else if (ccount == 3) begin
-            ccount <= 0;
-            hcount <= hcount + 1;
-            if (hcount >= HTS-1) begin
-                hcount <= 0;
-                vcount <= vcount + 1;
-                if (vcount >= VTS-1)
-                    vcount <= 0;
-            end
-        end
+        count_x <= n_count_x;
+        count_y <= n_count_y;
+        color <= n_color;
     end
-    assign disp_in_bounds = (vcount >= VTFP + VTPW && vcount < VTFP + VTPW + VTD && hcount >= HTFP + HTPW && hcount < HTFP + HTPW + HTD) ? 1 : 0;
-    assign px = (disp_in_bounds) ? (hcount - HTFP - HTPW) : 'bz;
-    assign py = (disp_in_bounds) ? (vcount - VTFP - VTPW) : 'bz;
-    
-    always@(posedge clk) begin
-        if (ascii_wr_en == 1)
-            mem[ascii_address] <= ascii_data;
-    end
+    wire hs, vs;
+//    assign hs = (n_count_x >= HTPW) ? 1'b1 : 1'b0;
+//    assign vs = (n_count_y >= VTPW) ? 1'b1 : 1'b0;
+    assign hs = (n_count_x >= HTD + HTBP && n_count_x < HTD + HTBP + HTPW) ? 1'b1 : 1'b0;
+    assign vs = (n_count_y >= VTD + VTBP && n_count_y < VTD + VTBP + VTPW) ? 1'b1 : 1'b0;
+    assign {vga_r, vga_g, vga_b} = {12/COLOR_BITS{color}};
+    reg [PIXEL_INTERFACE_LATENCY-1:0] hs_buf = 'b0;
+    reg [PIXEL_INTERFACE_LATENCY-1:0] vs_buf = 'b0;
+    always@(posedge clk) hs_buf[0] <= hs;
+    always@(posedge clk) vs_buf[0] <= vs;
+    genvar i;
+    generate for (i=1; i<PIXEL_INTERFACE_LATENCY; i=i+1) begin : PIXEL_BUFFER_STAGE_i
+        always@(posedge clk) hs_buf[i] <= hs_buf[i-1];
+        always@(posedge clk) vs_buf[i] <= vs_buf[i-1];
+    end endgenerate
+    assign vga_hs = SYNC_POL ^ hs_buf[PIXEL_INTERFACE_LATENCY-1];
+    assign vga_vs = SYNC_POL ^ vs_buf[PIXEL_INTERFACE_LATENCY-1];
 endmodule

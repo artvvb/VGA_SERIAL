@@ -3,7 +3,7 @@
 // Company: 
 // Engineer: 
 // 
-// Create Date: 01/13/2017 12:19:16 PM
+// Create Date: 05/04/2018 03:49:49 PM
 // Design Name: 
 // Module Name: uart_rx
 // Project Name: 
@@ -20,34 +20,33 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-//`include "math.vh"
-module uart_rx(
-    input clk,
-    output reg flag,
-    output reg [7:0] data,
-    input rx
+module uart_rx #(
+    parameter BAUD = 9600,
+    parameter CLOCK_FREQ = 100000000
+) (
+    input wire clk,
+    input wire rx,
+    output wire flag,
+    output wire [6:0] data
 );
-    parameter   BAUD        = 9600,
-                CLOCK       = 100000000;
-    localparam  COUNT_MAX   = CLOCK / BAUD,
-                COUNT_WIDTH = 32;
-    reg state = 0;
-    reg [COUNT_WIDTH-1:0] counter = 0;
-    reg [8:0] shift = 9'h1ff;
+    localparam COUNT_MAX = CLOCK_FREQ / BAUD;
+    reg [$clog2(COUNT_MAX)-1:0] count_d = 0;
     always@(posedge clk)
-        if (counter == COUNT_MAX) begin
-            counter <= 0;
-            if (shift[0] == 0) begin
-                shift <= {rx, 8'hff};
-                data <= shift[8:1];
-                flag <= 1;
-            end else begin
-                shift <= {rx, shift[8:1]};
-                flag <= 0;
-            end
-        end else begin
-            counter <= counter + 1;
-            flag <= 0;
+        if (count_d >= COUNT_MAX-1)
+            count_d <= 'b0;
+        else
+            count_d <= count_d + 1;
+    reg [1:0] _rx = 2'b11;
+    always@(posedge clk)
+        _rx <= {_rx[0], rx};
+    reg [10:0] shift = 11'h7ff;
+    always@(posedge clk)
+        if (count_d >= COUNT_MAX-1) begin
+            if (shift[0] == 1'b0)
+                shift <= {_rx[1], {10{1'b1}}};
+            else
+                shift <= {_rx[1], shift[10:1]};
         end
-            
+    assign flag = (shift[0] == 1'b0 && count_d >= COUNT_MAX-1) ? 1'b1 : 1'b0;
+    assign data = shift[7:1];
 endmodule
